@@ -128,6 +128,153 @@ class TextBasedParser(object):
             self.captions.append(c)
 
 
+
+
+
+class WebVTTParserCDP(TextBasedParser):
+    """
+    WebVTT parser for cdp.
+    
+    Group Sentences together.
+    
+    """
+    TIMEFRAME_LINE_PATTERN = re.compile('\s*((?:\d+:)?\d{2}:\d{2}.\d{3})\s*-->\s*((?:\d+:)?\d{2}:\d{2}.\d{3})')
+    COMMENT_PATTERN = re.compile('NOTE(?:\s.+|$)')
+    STYLE_PATTERN = re.compile('STYLE[ \t]*$')
+    IDENTIFY_SENTENCE = re.compile(r'.*[.!?]' )  
+
+    
+    def __init__(self):
+        super().__init__()
+        self.styles = []
+
+    # Group Sentences
+    def _group_by_sentence(self, line):
+        return re.match(self.IDENTIFY_SENTENCE, line)
+    
+    
+    def _compute_blocks(self, lines):
+        blocks = []
+
+        for index, line in enumerate(lines, start=1):
+            if line:
+                if not blocks:
+                    blocks.append(Block(index))
+                if not blocks[-1].lines:
+                    blocks[-1].line_number = index
+                blocks[-1].lines.append(line)
+            else:
+                blocks.append(Block(index))
+
+        # filter out empty blocks and skip signature
+        self.blocks = list(filter(lambda x: x.lines, blocks))[1:]
+
+    def _parse_cue_block(self, block):
+        caption = Caption()
+        cue_timings = None
+
+        for line_number, line in enumerate(block.lines):
+            if self._is_cue_timings_line(line):
+                if cue_timings is None:
+                    try:
+                        cue_timings = self._parse_timeframe_line(line)
+                    except MalformedCaptionError as e:
+                        raise MalformedCaptionError(
+                            '{} in line {}'.format(e, block.line_number + line_number))
+                else:
+                    raise MalformedCaptionError(
+                        '--> found in line {}'.format(block.line_number + line_number))
+            elif line_number == 0:
+                caption.identifier = line
+            else:
+                if self._group_by_sentence(line):
+                    caption.flagEndSentence = True
+                caption.add_line(line)
+
+        caption.start = cue_timings[0]
+        caption.end = cue_timings[1]
+        return caption
+    
+
+    def _parse(self, lines):
+        self.captions = []
+        self._compute_blocks(lines)
+        group_captions = ""
+        caption = None
+        start_time ='00:00:00.000'
+        
+        for block in self.blocks:
+            
+            if self._is_cue_block(block):
+                caption = self._parse_cue_block( block )
+                
+                # Begining of sentence so grab start
+                if group_captions == "":
+                    start_time = caption.start
+                    
+                group_captions += " " + caption.text
+                
+                
+                # if it is the end of a sentence group
+                if caption.flagEndSentence:
+                    #add all the sub captions
+                    caption.text = group_captions
+                    group_captions = ""
+                    
+                    # finished grouping so make sure to update the 
+                    caption.start = start_time
+                    self.captions.append(caption)
+
+                     
+                
+                    
+                
+            elif self._is_comment_block(block):
+                continue
+            
+            elif self._is_style_block(block):
+                if self.captions:
+                    raise MalformedFileError(
+                        'Style block defined after the first cue in line {}.'
+                        .format(block.line_number))
+                style = Style()
+                style.lines = block.lines[1:]
+                self.styles.append(style)
+                
+            else:
+                if len(block.lines) == 1:
+                    raise MalformedCaptionError(
+                        'Standalone cue identifier in line {}.'.format(block.line_number))
+                else:
+                    raise MalformedCaptionError(
+                        'Missing timing cue in line {}.'.format(block.line_number+1))
+
+
+    def _validate(self, lines):
+        if not re.match('WEBVTT', lines[0]):
+            raise MalformedFileError('The file does not have a valid format')
+
+    def _is_cue_timings_line(self, line):
+        return '-->' in line
+
+    def _is_cue_block(self, block):
+        """Returns True if it is a cue block
+        (one of the two first lines being a cue timing line)"""
+        return any(map(self._is_cue_timings_line, block.lines[:2]))
+
+    def _is_comment_block(self, block):
+        """Returns True if it is a comment block"""
+        return re.match(self.COMMENT_PATTERN, block.lines[0])
+
+    def _is_style_block(self, block):
+        """Returns True if it is a style block"""
+        return re.match(self.STYLE_PATTERN, block.lines[0])
+    
+    
+
+
+
+
 class SRTParser(TextBasedParser):
     """
     SRT parser.

@@ -1,6 +1,6 @@
 import os
 
-from .parsers import WebVTTParser, SRTParser, SBVParser
+from .parsers import WebVTTParser, SRTParser, SBVParser, WebVTTParserCDP
 from .writers import WebVTTWriter, SRTWriter
 from .errors import MissingFilenameError
 
@@ -59,6 +59,13 @@ class WebVTT(object):
         """Reads a WebVTT captions file."""
         parser = WebVTTParser().read(file)
         return cls(file=file, captions=parser.captions, styles=parser.styles)
+
+    @classmethod
+    def read_cdp(cls, file):
+        """Reads a WebVTT captions file."""
+        parser = WebVTTParserCDP().read(file)
+        return cls(file=file, captions=parser.captions, styles=parser.styles)
+
 
     @classmethod
     def read_buffer(cls, buffer):

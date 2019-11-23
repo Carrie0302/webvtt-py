@@ -14,10 +14,11 @@ class Caption(object):
     """
     Represents a caption.
     """
-    def __init__(self, start='00:00:00.000', end='00:00:00.000', text=None):
+    def __init__(self, start='00:00:00.000', end='00:00:00.000', text=None, flagEndSentence=False):
         self.start = start
         self.end = end
         self.identifier = None
+        self.flagEndSentence = flagEndSentence
 
         # If lines is a string convert to a list
         if text and isinstance(text, str):
@@ -87,6 +88,17 @@ class Caption(object):
     def end(self, value):
         self._end = self._parse_timestamp(value)
 
+
+    @property
+    def flagEndSentence(self):
+        return self._flagEndSentence
+    
+    
+    @flagEndSentence.setter
+    def flagEndSentence( self, value ):
+        self._flagEndSentence = value
+        
+        
     @property
     def lines(self):
         return self._lines
